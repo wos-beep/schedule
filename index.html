@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ホワサバ 攻略マネージャー</title>
+    <style>
+        :root {
+            --bg-color: #121820;
+            --card-bg: #1e2732;
+            --accent: #3498db;
+            --gold: #f1c40f;
+            --red: #ff4757;
+            --green: #2ed573;
+            --text: #ffffff;
+            --gray: #7f8c8d;
+        }
+        body { font-family: sans-serif; background: var(--bg-color); color: var(--text); margin: 0; padding: 10px; padding-bottom: 80px; }
+        .container { max-width: 500px; margin: auto; }
+        
+        /* イベント切り替え：2行で表示 */
+        .event-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        .event-btn { padding: 12px 5px; border: none; background: #2c3e50; color: #fff; border-radius: 8px; cursor: pointer; font-weight: bold; font-size: 0.85rem; }
+        .event-btn.active { background: var(--accent); outline: 2px solid #fff; }
+
+        .card { background: var(--card-bg); padding: 15px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        
+        /* 日数ボタン */
+        .day-selector { display: flex; justify-content: space-between; margin-bottom: 15px; gap: 4px; }
+        .day-btn { flex: 1; padding: 10px 0; border: none; background: #2c3e50; color: #fff; cursor: pointer; border-radius: 6px; font-weight: bold; }
+        .day-btn.active { background: var(--gold); color: #000; }
+
+        /* タスク項目 */
+        .task-item { display: flex; justify-content: space-between; align-items: center; padding: 11px; border-bottom: 1px solid #2c3e50; }
+        .rank-high { color: var(--red); font-weight: bold; }
+        .rank-mid { color: var(--green); font-weight: bold; }
+        .rank-low { color: var(--gold); font-size: 0.9rem; }
+        
+        input[type="checkbox"] { transform: scale(1.4); margin-right: 12px; cursor: pointer; }
+        .label-group { display: flex; align-items: center; flex: 1; cursor: pointer; }
+
+        /* 行商固定バー */
+        .info-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #c0392b; color: white; padding: 10px 0; text-align: center; font-weight: bold; font-size: 0.9rem; box-shadow: 0 -2px 10px rgba(0,0,0,0.5); z-index: 100; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="event-tabs">
+        <button id="btn-season" class="event-btn active" onclick="switchEvent('season')">季節イベント</button>
+        <button id="btn-svs" class="event-btn" onclick="switchEvent('svs')">最強王国(SvS)</button>
+        <button id="btn-ice" class="event-btn" onclick="switchEvent('ice')">氷原支配者</button>
+        <button id="btn-collab" class="event-btn" onclick="switchEvent('collab')">同盟大作戦</button>
+    </div>
+
+    <div class="card">
+        <div id="day-bar" class="day-selector"></div>
+        <div id="task-list"></div>
+    </div>
+</div>
+
+<div class="info-bar">
+    行商は毎日◎ (SSRのみで100k~120k)
+</div>
+
+<script>
+    let currentEvent = 'season';
+    let currentDay = 1;
+
+    const data = {
+        season: {
+            name: "季節イベント (7日間)", days: 7,
+            schedule: {
+                1: { "建造": "◯", "研究": "◯", "訓練": "◯", "鍵": "◎", "欠片": "◯" },
+                2: { "討伐(獣)": "◎" },
+                3: { "鍵": "◎", "欠片": "◯", "加速": "◯" },
+                4: { "訓練": "◎" },
+                5: { "英雄装備": "◎", "ダイヤ": "◎" },
+                6: { "建造": "◯", "研究": "◯", "訓練": "△", "採集": "◎" },
+                7: { "加速": "◎", "領主装備": "◯" }
+            }
+        },
+        svs: {
+            name: "最強王国準備 (5日間)", days: 5,
+            schedule: {
+                1: { "領主宝石": "◎", "火晶": "◎", "加速": "◎" },
+                2: { "火晶": "◯", "加速": "◯", "ルーレット": "◎", "欠片": "△", "採集": "◎", "専門家": "◎" },
+                3: { "領主宝石": "△", "ルーレット": "◯", "欠片": "◯", "専門家": "△", "ペット": "◯", "野獣巨獣": "◎" },
+                4: { "領主宝石": "◯", "英雄装備": "◯", "訓練昇格": "◎" },
+                5: { "火晶": "◯", "加速": "◯", "ペット": "◎", "英雄装備": "◎", "領主装備": "◎" }
+            }
+        },
+        ice: {
+            name: "氷原支配者 (7日間)", days: 7,
+            schedule: {
+                1: { "火晶": "◎", "加速": "◎", "宝石": "◎" },
+                2: { "火晶": "◯", "加速": "◯", "ルーレット": "◎", "欠片": "△", "専門家": "◎", "英雄装備": "△" },
+                3: { "宝石": "△", "ルーレット": "◯", "欠片": "◎", "専門家": "△", "ペット": "◯" },
+                4: { "宝石": "◯", "英雄装備": "◯", "訓練": "◎" },
+                5: { "火晶": "◎", "加速": "◎", "英雄装備": "◎" },
+                6: { "訓練": "◎", "領主装備": "◎" },
+                7: { "火晶": "◯", "加速": "◯", "欠片": "◯", "ペット": "◎", "領主装備": "◯", "採集": "◎" }
+            }
+        },
+        collab: {
+            name: "同盟大作戦 with 軍備･士官", days: 7,
+            schedule: {
+                1: { "ダイヤ": "△", "火晶": "◯", "加速": "◯", "採集": "◎", "欠片": "△", "領装": "△", "専門": "◯" },
+                2: { "ダイヤ": "◎", "火晶": "◯", "加速": "◯", "欠片": "◯", "領装": "△", "専門": "◎" },
+                3: { "ダイヤ": "△", "採集": "◎", "宝石": "◯", "ペット": "◯", "英装": "△", "訓練": "△" },
+                4: { "ダイヤ": "△", "宝石": "△", "英装": "○", "訓練": "◎" },
+                5: { "ダイヤ": "◯", "火晶": "◎", "加速": "◎", "領装": "◯", "英装": "△" },
+                6: { "ダイヤ": "△", "火晶": "◯", "加速": "◯", "欠片": "△", "領装": "△", "ペット": "◎", "英装": "◎" },
+                7: { "ダイヤ": "△", "火晶": "◯", "加速": "◯", "欠片": "◎", "領装": "◎", "ペット": "◎", "英装": "◎", "【注意】": "半日のみ" }
+            }
+        }
+    };
+
+    function switchEvent(type) {
+        currentEvent = type;
+        currentDay = 1;
+        document.querySelectorAll('.event-btn').forEach(btn => btn.classList.remove('active'));
+        document.getElementById('btn-' + type).classList.add('active');
+        renderDays();
+        renderTasks();
+    }
+
+    function renderDays() {
+        const bar = document.getElementById('day-bar');
+        let html = '';
+        for (let i = 1; i <= data[currentEvent].days; i++) {
+            html += `<button class="day-btn ${i === currentDay ? 'active' : ''}" onclick="setDay(${i})">${i}</button>`;
+        }
+        bar.innerHTML = html;
+    }
+
+    function setDay(day) {
+        currentDay = day;
+        renderDays();
+        renderTasks();
+    }
+
+    function renderTasks() {
+        const container = document.getElementById('task-list');
+        const tasks = data[currentEvent].schedule[currentDay] || {};
+        let html = `<div style="text-align:center; color:var(--gold); margin-bottom:12px; font-size:0.8rem; font-weight:bold;">― ${data[currentEvent].name} DAY ${currentDay} ―</div>`;
+
+        for (const [name, rank] of Object.entries(tasks)) {
+            let rankClass = rank === "◎" ? "rank-high" : rank === "◯" ? "rank-mid" : rank === "△" ? "rank-low" : "";
+            html += `
+                <div class="task-item">
+                    <label class="label-group">
+                        <input type="checkbox">
+                        <span>${name}</span>
+                    </label>
+                    <span class="${rankClass}">${rank}</span>
+                </div>`;
+        }
+        container.innerHTML = html;
+    }
+
+    renderDays();
+    renderTasks();
+</script>
+
+</body>
+</html>
